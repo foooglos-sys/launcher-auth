@@ -1,0 +1,11 @@
+{
+	"name": "launcher-auth",
+	"version": "1.0.0",
+	"scripts": {
+		"start": "node index.js"
+	},
+	"dependencies": {
+		"express": "^4.19.2",
+		"better-sqlite3": "^11.7.0"
+	}
+}

@@ -79,3 +79,23 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log("Server started");
 });
+app.post("/create-user", (req, res) => {
+    const { login, password, license_key, days } = req.body;
+
+    if (!login || !password || !license_key)
+        return res.json({ success: false, message: "Missing fields" });
+
+    const expire = Math.floor(Date.now() / 1000) + (days || 30) * 86400;
+
+    try {
+        db.prepare(`
+            INSERT INTO users
+            (login,password,license_key,hwid,expire,banned)
+            VALUES (?,?,?,?,?,0)
+        `).run(login, password, license_key, "", expire);
+
+        res.json({ success: true });
+    } catch {
+        res.json({ success: false, message: "User exists" });
+    }
+});

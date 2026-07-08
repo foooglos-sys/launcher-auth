@@ -46,7 +46,7 @@ app.post("/register", (req, res) => {
 // Логин
 app.post("/login", (req, res) => {
 
-    const { login, password, hwid } = req.body;
+    const { login, password, hwid, license_key } = req.body;
 
     const user = db.prepare(
         "SELECT * FROM users WHERE login=? AND password=?"
@@ -55,8 +55,43 @@ app.post("/login", (req, res) => {
     if (!user)
         return res.json({ success: false, message: "Wrong login" });
 
+    if (user.license_key !== license_key)
+        return res.json({
+            success: false,
+            message: "Invalid license key"
+        });
+
     if (user.banned)
-        return res.json({ success: false, message: "Banned" });
+        return res.json({
+            success: false,
+            message: "Banned"
+        });
+
+    if (user.expire < Math.floor(Date.now() / 1000))
+        return res.json({
+            success: false,
+            message: "Subscription expired"
+        });
+
+    if (!user.hwid) {
+        db.prepare("UPDATE users SET hwid=? WHERE login=?")
+            .run(hwid, login);
+
+        return res.json({
+            success: true,
+            message: "HWID linked"
+        });
+    }
+
+    if (user.hwid !== hwid)
+        return res.json({
+            success: false,
+            message: "HWID mismatch"
+        });
+
+    res.json({
+        success: true
+    });
 
     if (user.expire < Math.floor(Date.now() / 1000))
         return res.json({ success: false, message: "Subscription expired" });

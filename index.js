@@ -21,14 +21,17 @@ app.get("/", (req, res) => {
     res.send("Launcher Auth API");
 });
 
-// Регистрация
 app.post("/register", (req, res) => {
+
     const { login, password, key } = req.body;
+
+    if (!login || !password)
+        return res.json({ success: false, error: "Missing fields" });
 
     const exists = db.prepare("SELECT * FROM users WHERE login=?").get(login);
 
     if (exists)
-        return res.json({ success: false, message: "User exists" });
+        return res.json({ success: false, error: "User exists" });
 
     db.prepare(`
         INSERT INTO users(login,password,license_key,expire,banned)
@@ -36,101 +39,80 @@ app.post("/register", (req, res) => {
     `).run(
         login,
         password,
-        key,
+        key || "",
         Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60
     );
 
     res.json({ success: true });
+
 });
 
-// Логин
 app.post("/login", (req, res) => {
 
-    const { login, password, hwid, license_key } = req.body;
+    const { login, pass } = req.body;
 
     const user = db.prepare(
         "SELECT * FROM users WHERE login=? AND password=?"
-    ).get(login, password);
+    ).get(login, pass);
 
     if (!user)
-        return res.json({ success: false, message: "Wrong login" });
-
-    if (user.license_key !== license_key)
         return res.json({
             success: false,
-            message: "Invalid license key"
-        });
-
-    if (user.banned)
-        return res.json({
-            success: false,
-            message: "Banned"
-        });
-
-    if (user.expire < Math.floor(Date.now() / 1000))
-        return res.json({
-            success: false,
-            message: "Subscription expired"
-        });
-
-    if (!user.hwid) {
-        db.prepare("UPDATE users SET hwid=? WHERE login=?")
-            .run(hwid, login);
-
-        return res.json({
-            success: true,
-            message: "HWID linked"
-        });
-    }
-
-    if (user.hwid !== hwid)
-        return res.json({
-            success: false,
-            message: "HWID mismatch"
+            error: "Неверный логин или пароль"
         });
 
     res.json({
-        success: true
+        success: true,
+        user: {
+            login: user.login,
+            id: 1,
+            role: "Premium",
+            subscription: "9999-12-31 23:59:59",
+            hwid: ""
+        }
     });
 
-    if (user.expire < Math.floor(Date.now() / 1000))
-        return res.json({ success: false, message: "Subscription expired" });
+});
 
-    if (!user.hwid) {
-        db.prepare("UPDATE users SET hwid=? WHERE login=?")
-            .run(hwid, login);
+app.post("/create-user", (req, res) => {
 
-        return res.json({ success: true, message: "HWID linked" });
+    const { login, password, license_key, days } = req.body;
+
+    if (!login || !password)
+        return res.json({ success: false });
+
+    const expire =
+        Math.floor(Date.now() / 1000) + (days || 30) * 86400;
+
+    try {
+
+        db.prepare(`
+            INSERT INTO users
+            (login,password,license_key,hwid,expire,banned)
+            VALUES (?,?,?,?,?,0)
+        `).run(
+            login,
+            password,
+            license_key || "",
+            "",
+            expire
+        );
+
+        res.json({ success: true });
+
+    } catch {
+
+        res.json({
+            success: false,
+            error: "User exists"
+        });
+
     }
 
-    if (user.hwid !== hwid)
-        return res.json({ success: false, message: "HWID mismatch" });
-
-    res.json({ success: true });
 });
 
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
     console.log("Server started");
-});
-app.post("/create-user", (req, res) => {
-    const { login, password, license_key, days } = req.body;
-
-    if (!login || !password || !license_key)
-        return res.json({ success: false, message: "Missing fields" });
-
-    const expire = Math.floor(Date.now() / 1000) + (days || 30) * 86400;
-
-    try {
-        db.prepare(`
-            INSERT INTO users
-            (login,password,license_key,hwid,expire,banned)
-            VALUES (?,?,?,?,?,0)
-        `).run(login, password, license_key, "", expire);
-
-        res.json({ success: true });
-    } catch {
-        res.json({ success: false, message: "User exists" });
-    }
 });

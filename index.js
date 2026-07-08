@@ -6,7 +6,6 @@ app.use(express.json());
 
 const db = new Database("users.db");
 
-// База
 db.prepare(`
 CREATE TABLE IF NOT EXISTS users(
     login TEXT PRIMARY KEY,
@@ -18,22 +17,18 @@ CREATE TABLE IF NOT EXISTS users(
 )
 `).run();
 
-// Главная
 app.get("/", (req, res) => {
     res.send("Launcher Auth API");
 });
 
 // Регистрация
 app.post("/register", (req, res) => {
-    const { login, password, license_key } = req.body;
-
-    if (!login || !password || !license_key)
-        return res.json({ success: false, message: "Missing fields" });
+    const { login, password, key } = req.body;
 
     const exists = db.prepare("SELECT * FROM users WHERE login=?").get(login);
 
     if (exists)
-        return res.json({ success: false, message: "Login exists" });
+        return res.json({ success: false, message: "User exists" });
 
     db.prepare(`
         INSERT INTO users(login,password,license_key,expire,banned)
@@ -41,8 +36,8 @@ app.post("/register", (req, res) => {
     `).run(
         login,
         password,
-        license_key,
-        Math.floor(Date.now()/1000) + 30*24*60*60 // 30 дней
+        key,
+        Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60
     );
 
     res.json({ success: true });
@@ -55,42 +50,32 @@ app.post("/login", (req, res) => {
 
     const user = db.prepare(
         "SELECT * FROM users WHERE login=? AND password=?"
-    ).get(login,password);
+    ).get(login, password);
 
     if (!user)
-        return res.json({ success:false, message:"Wrong login/password" });
+        return res.json({ success: false, message: "Wrong login" });
 
     if (user.banned)
-        return res.json({ success:false, message:"Banned" });
+        return res.json({ success: false, message: "Banned" });
 
-    if (user.expire < Math.floor(Date.now()/1000))
-        return res.json({ success:false, message:"Subscription expired" });
+    if (user.expire < Math.floor(Date.now() / 1000))
+        return res.json({ success: false, message: "Subscription expired" });
 
-    // первая привязка HWID
-    if (!user.hwid || user.hwid === "") {
+    if (!user.hwid) {
         db.prepare("UPDATE users SET hwid=? WHERE login=?")
             .run(hwid, login);
 
-        return res.json({
-            success:true,
-            message:"HWID linked"
-        });
+        return res.json({ success: true, message: "HWID linked" });
     }
 
-    // проверка HWID
     if (user.hwid !== hwid)
-        return res.json({
-            success:false,
-            message:"Wrong HWID"
-        });
+        return res.json({ success: false, message: "HWID mismatch" });
 
-    res.json({
-        success:true,
-        message:"Login successful"
-    });
-
+    res.json({ success: true });
 });
 
-app.listen(process.env.PORT || 3000, () => {
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
     console.log("Server started");
 });
